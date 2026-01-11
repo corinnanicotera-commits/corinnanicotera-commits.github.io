@@ -18,6 +18,29 @@
         }
         .legend-item { display: flex; align-items: center; margin-bottom: 5px; }
         .color-box { width: 15px; height: 15px; margin-right: 10px; display: inline-block; }
+		.page-footer {
+		  position: fixed;
+		  bottom: 0;
+		  width: 100%;
+		  display: flex;
+		  justify-content: flex-end;
+		  padding: 0px 0px;
+		  font-family: 'Brush Script MT', cursive;
+		  color: white;
+		  animation: slideUp 1s ease-out forwards;
+		}
+
+		@keyframes slideUp {
+		  from {
+			transform: translateY(100%);
+			opacity: 0;
+		  }
+		  to {
+			transform: translateY(0);
+			opacity: 1;
+		  }
+		}
+			
     </style>
 </head>
 <body>
@@ -27,8 +50,16 @@
         <div class="legend-item"><span class="color-box" style="background: blue;"></span>Folium di Cartesio (Simmetrico)</div>
         <div class="legend-item"><span class="color-box" style="background: red;"></span>Cuspide (Simmetrica)</div>
         <div class="legend-item"><span class="color-box" style="background: lime;"></span>Equatore (Retta Impropria)</div>
-        <div class="legend-item"><span class="color-box" style="background: gray;"></span>Assi X / Y (Meridiani)</div>
-        <p><small>Ruota col mouse, zooma con la rotellina.</small></p>
+        <div class="legend-item"><span class="color-box" style="background: gray;"></span>Assi X / Y (Meridiani)</div>       
+		<p>
+			<small>
+				<ul>
+					<li>Ruota con tasto sx mouse</li>
+					<li>Zoom con la rotellina</li>
+				</ul>
+			</small>
+		</p>
+
     </div>
 
     <script type="importmap">
@@ -201,5 +232,6 @@
 
         animate();
     </script>
+	<footer class="page-footer">prompt design by Corinna Nicotera</footer>
 </body>
 </html>
