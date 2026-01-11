@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Modello Proiettivo: Sfera e Curve Algebriche</title>
+    <style>
+        body { margin: 0; overflow: hidden; background-color: #1a1a1a; font-family: sans-serif; }
+        #info {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            color: white;
+            background: rgba(0, 0, 0, 0.7);
+            padding: 10px;
+            border-radius: 5px;
+            pointer-events: none;
+        }
+        .legend-item { display: flex; align-items: center; margin-bottom: 5px; }
+        .color-box { width: 15px; height: 15px; margin-right: 10px; display: inline-block; }
+    </style>
+</head>
+<body>
+
+    <div id="info">
+        <h3>Modello Proiettivo 3D</h3>
+        <div class="legend-item"><span class="color-box" style="background: blue;"></span>Folium di Cartesio (Simmetrico)</div>
+        <div class="legend-item"><span class="color-box" style="background: red;"></span>Cuspide (Simmetrica)</div>
+        <div class="legend-item"><span class="color-box" style="background: lime;"></span>Equatore (Retta Impropria)</div>
+        <div class="legend-item"><span class="color-box" style="background: gray;"></span>Assi X / Y (Meridiani)</div>
+        <p><small>Ruota col mouse, zooma con la rotellina.</small></p>
+    </div>
+
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+                "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+            }
+        }
+    </script>
+
+    <script type="module">
+        import * as THREE from 'three';
+        import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+        // 1. SETUP SCENA
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x1a1a1a);
+
+        const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
+        camera.position.set(3, 3, 5);
+
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        document.body.appendChild(renderer.domElement);
+
+        const controls = new OrbitControls(camera, renderer.domElement);
+        controls.enableDamping = true;
+
+        // 2. LA SFERA (Base trasparente + Wireframe)
+        const radius = 2;
+        const sphereGeometry = new THREE.SphereGeometry(radius, 32, 32);
+       
+        // Materiale trasparente per la "superficie"
+        const sphereMaterial = new THREE.MeshBasicMaterial({
+            color: 0xffffff,
+            transparent: true,
+            opacity: 0.1,
+            side: THREE.DoubleSide
+        });
+        const sphereMesh = new THREE.Mesh(sphereGeometry, sphereMaterial);
+        scene.add(sphereMesh);
+
+        // Wireframe sottile per dare volume
+        const wireframe = new THREE.WireframeGeometry(sphereGeometry);
+        const lineMat = new THREE.LineBasicMaterial({ color: 0x444444, transparent: true, opacity: 0.2 });
+        const wireframeLines = new THREE.LineSegments(wireframe, lineMat);
+        scene.add(wireframeLines);
+
+        // 3. GLI ASSI E L'EQUATORE
+
+        // Equatore (Retta impropria) - Anello verde spesso
+        const equatorGeometry = new THREE.RingGeometry(radius - 0.03, radius + 0.03, 64);
+        const equatorMaterial = new THREE.MeshBasicMaterial({ color: 0x00ff00, side: THREE.DoubleSide });
+        const equator = new THREE.Mesh(equatorGeometry, equatorMaterial);
+        equator.rotation.x = Math.PI / 2; // Sdraiato sul piano XZ
+        scene.add(equator);
+
+        // Assi X e Y (Meridiani che tagliano dal Polo Nord al Polo Sud)
+        // Meridiano asse X (piano XZ -> ruotato)
+        const meridianMaterial = new THREE.LineBasicMaterial({ color: 0xaaaaaa });
+       
+        // Cerchio passante per i poli (sul piano YZ)
+        const axisYLoopGeo = new THREE.BufferGeometry().setFromPoints(
+            new THREE.EllipseCurve(0, 0, radius, radius, 0, 2 * Math.PI, false, 0).getPoints(64)
+        );
+        const axisYLoop = new THREE.Line(axisYLoopGeo, meridianMaterial);
+        axisYLoop.rotation.y = Math.PI / 2; // Ruota per allinearsi
+        scene.add(axisYLoop);
+
+        // Cerchio passante per i poli (sul piano XY)
+        const axisXLoop = new THREE.Line(axisYLoopGeo, meridianMaterial);
+        scene.add(axisXLoop);
+
+        // 4. COSTRUZIONE CURVE ALGEBRICHE
+        // Funzione helper per proiettare punto 2D (x,y) sulla sfera 3D (x, y, z)
+        // Immaginiamo il piano di proiezione a z = radius (tangente polo nord)
+        // P_sfera = r * (x, y, r) / norm(x, y, r)
+        // Nota: Nel codice Three.js, Y è spesso l'asse verticale.
+        // Per rispettare la richiesta "Equatore taglia altezza", usiamo Y come asse verticale (Poli su Y).
+       
+        function projectToSphere(x, z) {
+            // Usiamo x, z come coordinate piane, y è l'asse dei poli
+            // Vettore direzione: (x, r, z) -> Punta verso il piano tangente superiore
+            const v = new THREE.Vector3(x, radius, z);
+            v.normalize().multiplyScalar(radius); // Proietta sulla superficie
+            return v;
+        }
+
+        // --- CURVA 1: FOLIUM DI CARTESIO (Blu) ---
+        // x^3 + y^3 - 3axy = 0. Parametrica: x = 3at/(1+t^3), y = 3at^2/(1+t^3)
+        // Poniamo a = 1.
+        const foliumPointsUpper = [];
+        const foliumPointsLower = []; // Antipodali
+       
+        // Iteriamo t. Attenzione a t = -1 (asintoto/infinito)
+        const steps = 1000;
+        const range = 20; // range di t
+       
+        for (let i = 0; i <= steps; i++) {
+            const t = -range + (i * (2 * range) / steps);
+           
+            // Evitiamo la singolarità esatta, anche se proiettivamente è un punto sull'equatore
+            if (Math.abs(t + 1) < 0.05) continue;
+
+            const denom = 1 + Math.pow(t, 3);
+            const x2d = (3 * t) / denom;
+            const y2d = (3 * t * t) / denom; // Usiamo y2d come coordinata Z nel 3D
+
+            // Calcolo punto emisfero superiore
+            const p = projectToSphere(x2d, y2d);
+            foliumPointsUpper.push(p.x, p.y, p.z);
+           
+            // Calcolo punto antipodale (emisfero inferiore)
+            foliumPointsLower.push(-p.x, -p.y, -p.z);
+        }
+
+        const foliumGeoUp = new THREE.BufferGeometry();
+        foliumGeoUp.setAttribute('position', new THREE.Float32BufferAttribute(foliumPointsUpper, 3));
+        const foliumMat = new THREE.LineBasicMaterial({ color: 0x0000ff, linewidth: 2 });
+        scene.add(new THREE.Line(foliumGeoUp, foliumMat));
+
+        const foliumGeoDown = new THREE.BufferGeometry();
+        foliumGeoDown.setAttribute('position', new THREE.Float32BufferAttribute(foliumPointsLower, 3));
+        scene.add(new THREE.Line(foliumGeoDown, foliumMat));
+
+
+        // --- CURVA 2: CUSPIDE (Semi-cubical parabola) (Rossa) ---
+        // y^2 = x^3. Parametrica: x = t^2, y = t^3
+        const cuspPointsUpper = [];
+        const cuspPointsLower = [];
+
+        for (let i = 0; i <= steps; i++) {
+            const t = -2 + (i * 4 / steps); // range t più piccolo basta per visualizzare la cuspide
+           
+            // Scaliamo un po' per farla stare bene sulla sfera
+            const scale = 0.5;
+            const x2d = Math.pow(t, 2) * scale;
+            const y2d = Math.pow(t, 3) * scale;
+
+            const p = projectToSphere(x2d, y2d);
+            cuspPointsUpper.push(p.x, p.y, p.z);
+            cuspPointsLower.push(-p.x, -p.y, -p.z);
+        }
+
+        const cuspGeoUp = new THREE.BufferGeometry();
+        cuspGeoUp.setAttribute('position', new THREE.Float32BufferAttribute(cuspPointsUpper, 3));
+        const cuspMat = new THREE.LineBasicMaterial({ color: 0xff0000, linewidth: 2 });
+        scene.add(new THREE.Line(cuspGeoUp, cuspMat));
+
+        const cuspGeoDown = new THREE.BufferGeometry();
+        cuspGeoDown.setAttribute('position', new THREE.Float32BufferAttribute(cuspPointsLower, 3));
+        scene.add(new THREE.Line(cuspGeoDown, cuspMat));
+
+
+        // 5. RENDERING LOOP
+        function animate() {
+            requestAnimationFrame(animate);
+            controls.update();
+            renderer.render(scene, camera);
+        }
+
+        // Gestione resize finestra
+        window.addEventListener('resize', onWindowResize, false);
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+
+        animate();
+    </script>
+</body>
+</html>
